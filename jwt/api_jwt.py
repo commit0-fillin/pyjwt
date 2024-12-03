@@ -25,7 +25,12 @@ class PyJWT:
         This method is intended to be overridden by subclasses that need to
         encode the payload in a different way, e.g. compress the payload.
         """
-        pass
+        json_payload = json.dumps(
+            payload,
+            separators=(',', ':'),
+            cls=json_encoder
+        ).encode('utf-8')
+        return base64url_encode(json_payload)
 
     def _decode_payload(self, decoded: dict[str, Any]) -> Any:
         """
@@ -35,7 +40,11 @@ class PyJWT:
         decode the payload in a different way, e.g. decompress compressed
         payloads.
         """
-        pass
+        try:
+            payload = base64url_decode(decoded['payload'])
+            return json.loads(payload.decode('utf-8'))
+        except (ValueError, TypeError):
+            raise DecodeError('Invalid payload padding')
 _jwt_global_obj = PyJWT()
 encode = _jwt_global_obj.encode
 decode_complete = _jwt_global_obj.decode_complete
