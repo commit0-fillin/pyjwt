@@ -38,7 +38,28 @@ def get_default_algorithms() -> dict[str, Algorithm]:
     """
     Returns the algorithms that are implemented by the library.
     """
-    pass
+    default_algorithms = {
+        'none': NoneAlgorithm(),
+        'HS256': HMACAlgorithm(HMACAlgorithm.SHA256),
+        'HS384': HMACAlgorithm(HMACAlgorithm.SHA384),
+        'HS512': HMACAlgorithm(HMACAlgorithm.SHA512),
+    }
+    
+    if has_crypto:
+        default_algorithms.update({
+            'RS256': RSAAlgorithm(RSAAlgorithm.SHA256),
+            'RS384': RSAAlgorithm(RSAAlgorithm.SHA384),
+            'RS512': RSAAlgorithm(RSAAlgorithm.SHA512),
+            'ES256': ECAlgorithm(ECAlgorithm.SHA256),
+            'ES384': ECAlgorithm(ECAlgorithm.SHA384),
+            'ES512': ECAlgorithm(ECAlgorithm.SHA512),
+            'PS256': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA256),
+            'PS384': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA384),
+            'PS512': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA512),
+            'EdDSA': OKPAlgorithm(),
+        })
+    
+    return default_algorithms
 
 class Algorithm(ABC):
     """
@@ -51,7 +72,9 @@ class Algorithm(ABC):
 
         If there is no hash algorithm, raises a NotImplementedError.
         """
-        pass
+        if not hasattr(self, 'hash_alg'):
+            raise NotImplementedError("Hash algorithm not specified")
+        return self.hash_alg(bytestr).digest()
 
     @abstractmethod
     def prepare_key(self, key: Any) -> Any:
@@ -59,7 +82,7 @@ class Algorithm(ABC):
         Performs necessary validation and conversions on the key and returns
         the key value in the proper format for sign() and verify().
         """
-        pass
+        raise NotImplementedError("prepare_key() must be implemented by subclasses")
 
     @abstractmethod
     def sign(self, msg: bytes, key: Any) -> bytes:
@@ -67,7 +90,7 @@ class Algorithm(ABC):
         Returns a digital signature for the specified message
         using the specified key value.
         """
-        pass
+        raise NotImplementedError("sign() must be implemented by subclasses")
 
     @abstractmethod
     def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
@@ -75,7 +98,7 @@ class Algorithm(ABC):
         Verifies that the specified digital signature is valid
         for the specified message and key values.
         """
-        pass
+        raise NotImplementedError("verify() must be implemented by subclasses")
 
     @staticmethod
     @abstractmethod
@@ -83,7 +106,7 @@ class Algorithm(ABC):
         """
         Serializes a given key into a JWK
         """
-        pass
+        raise NotImplementedError("to_jwk() must be implemented by subclasses")
 
     @staticmethod
     @abstractmethod
@@ -91,7 +114,7 @@ class Algorithm(ABC):
         """
         Deserializes a given key from JWK back into a key object
         """
-        pass
+        raise NotImplementedError("from_jwk() must be implemented by subclasses")
 
 class NoneAlgorithm(Algorithm):
     """
@@ -149,7 +172,7 @@ if has_crypto:
         """
 
         def __init__(self, **kwargs: Any) -> None:
-            pass
+            self.hash_alg = None  # OKP algorithms don't use a hash function
 
         def sign(self, msg: str | bytes, key: Ed25519PrivateKey | Ed448PrivateKey) -> bytes:
             """
@@ -159,7 +182,8 @@ if has_crypto:
                 or :class:`.Ed448PrivateKey` isinstance
             :return bytes signature: The signature, as bytes
             """
-            pass
+            msg_bytes = force_bytes(msg)
+            return key.sign(msg_bytes)
 
         def verify(self, msg: str | bytes, key: AllowedOKPKeys, sig: str | bytes) -> bool:
             """
@@ -171,4 +195,14 @@ if has_crypto:
                 A private or public EdDSA key instance
             :return bool verified: True if signature is valid, False if not.
             """
-            pass
+            msg_bytes = force_bytes(msg)
+            sig_bytes = force_bytes(sig)
+            
+            if isinstance(key, (Ed25519PrivateKey, Ed448PrivateKey)):
+                key = key.public_key()
+            
+            try:
+                key.verify(sig_bytes, msg_bytes)
+                return True
+            except InvalidSignature:
+                return False
